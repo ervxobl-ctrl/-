@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>维度花园 · 实数与复数超立方体 | 1~9维 + 复数维度</title>
+  <style>
+    :root {
+      --bg: #010118;
+      --text: #e0e8ff;
+      --accent: #ff5e9c;
+      --accent2: #5eb8ff;
+      --panel-bg: rgba(10, 12, 35, 0.85);
+      --radius: 32px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      background: var(--bg);
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: var(--text);
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    #three-container { position: fixed; inset: 0; z-index: 1; }
+    canvas { display: block; }
+
+    /* 底部控制栏 - 极简融合 */
+    .control-panel {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 10;
+      background: var(--panel-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: var(--radius);
+      padding: 12px 28px;
+      display: flex; align-items: center; gap: 20px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 40px rgba(100,150,255,0.1);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .dim-group {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .dim-slider {
+      width: 180px;
+      -webkit-appearance: none;
+      background: linear-gradient(90deg, #ff5e9c, #5eb8ff);
+      height: 5px;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    .dim-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 0 25px var(--accent), 0 0 40px var(--accent2);
+      border: 2px solid rgba(255,255,255,0.8);
+    }
+    .dim-display {
+      font-size: 1.8rem; font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff;
+      text-shadow: 0 0 25px var(--accent), 0 0 50px var(--accent2);
+      min-width: 70px; text-align: center;
+      line-height: 1;
+    }
+    .mode-switch {
+      display: flex; gap: 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 30px;
+      padding: 4px;
+    }
+    .mode-btn {
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      border-radius: 26px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.25s;
+      white-space: nowrap;
+    }
+    .mode-btn.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 20px var(--accent);
+    }
+    .info-tags {
+      display: flex; gap: 16px;
+      font-size: 0.7rem; letter-spacing: 0.08em;
+      color: rgba(200,210,240,0.7);
+      align-items: center;
+    }
+    .info-tags span {
+      color: #fff; font-weight: 600; margin-left: 6px;
+    }
+    .color-legend {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.65rem;
+      color: rgba(255,255,255,0.5);
+      margin-left: 8px;
+    }
+    .phase-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+    }
+    @media (max-width: 768px) {
+      .control-panel {
+        padding: 10px 14px; gap: 10px; border-radius: 24px;
+      }
+      .dim-slider { width: 100px; }
+      .dim-display { font-size: 1.3rem; min-width: 50px; }
+      .mode-btn { padding: 6px 10px; font-size: 0.65rem; }
+    }
+  </style>
+</head>
+<body>
+  <div id="three-container"></div>
+
+  <div class="control-panel">
+    <div class="dim-group">
+      <span class="dim-display" id="dim-big">4D</span>
+    </div>
+    <input type="range" class="dim-slider" id="dim-slider" min="1" max="9" value="4" step="1">
+    <div class="mode-switch" id="mode-switch">
+      <button class="mode-btn active" data-mode="real">ℝ 实数</button>
+      <button class="mode-btn" data-mode="complex">ℂ 复数</button>
+    </div>
+    <div class="info-tags">
+      <span>顶点 <span id="verts-label">16</span></span>
+      <span>边 <span id="edges-label">32</span></span>
+    </div>
+    <div class="color-legend" id="phase-legend" style="display:none;">
+      <div class="phase-dot"></div> 相位映射
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // ---------- DOM ----------
+    const container = document.getElementById('three-container');
+    const dimSlider = document.getElementById('dim-slider');
+    const dimBig = document.getElementById('dim-big');
+    const vertsLabel = document.getElementById('verts-label');
+    const edgesLabel = document.getElementById('edges-label');
+    const modeSwitch = document.getElementById('mode-switch');
+    const modeBtns = document.querySelectorAll('.mode-btn');
+    const phaseLegend = document.getElementById('phase-legend');
+
+    // ---------- 状态 ----------
+    let currentMode = 'real'; // 'real' | 'complex'
+    let currentDim = 4;       // 实数维度 1-9, 复数维度映射为 1-3 (ℂ¹, ℂ², ℂ³)
+    let complexM = 2;         // 复数维度实际复维数，默认ℂ²
+
+    // 将滑块值转换为实际维度参数
+    function getDisplayDim() {
+      if (currentMode === 'real') return currentDim;
+      else return `ℂ${complexM}`;
+    }
+    function updateComplexMFromSlider(val) {
+      // 复数模式下滑块值1-3对应复维数1,2,3
+      complexM = Math.min(3, Math.max(1, val));
+    }
+    // 初始化
+    updateComplexMFromSlider(currentDim);
+
+    // ---------- Three.js 初始化 ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010118);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(5, 2.8, 7);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      alpha: false,
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    // 后处理：Bloom 绚丽泛光
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.8,   // 强度
+      0.3,   // 半径
+      0.1    // 阈值
+    );
+    composer.addPass(bloomPass);
+
+    // OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.7;
+    controls.zoomSpeed = 1.3;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // 光照与环境
+    const ambient = new THREE.AmbientLight(0x334466, 1.5);
+    scene.add(ambient);
+
+    // 绚丽星空背景（粒子）
+    const starsGeom = new THREE.BufferGeometry();
+    const starsCount = 1200;
+    const starsPositions = new Float32Array(starsCount * 3);
+    const starsColors = new Float32Array(starsCount * 3);
+    for (let i = 0; i < starsCount; i++) {
+      starsPositions[i * 3] = (Math.random() - 0.5) * 22;
+      starsPositions[i * 3 + 1] = (Math.random() - 0.5) * 16;
+      starsPositions[i * 3 + 2] = (Math.random() - 0.5) * 18;
+      const hue = Math.random() * 0.8 + 0.55; // 蓝紫色调
+      const col = new THREE.Color().setHSL(hue % 1, 0.7, 0.5 + Math.random() * 0.3);
+      starsColors[i * 3] = col.r;
+      starsColors[i * 3 + 1] = col.g;
+      starsColors[i * 3 + 2] = col.b;
+    }
+    starsGeom.setAttribute('position', new THREE.BufferAttribute(starsPositions, 3));
+    starsGeom.setAttribute('color', new THREE.BufferAttribute(starsColors, 3));
+    const starsMat = new THREE.PointsMaterial({
+      size: 0.06,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      opacity: 0.8,
+    });
+    const stars = new THREE.Points(starsGeom, starsMat);
+    scene.add(stars);
+
+    // 微弱的半透明网格
+    const gridHelper = new THREE.GridHelper(7, 30, 0x332244, 0x221133);
+    gridHelper.position.y = -1.8;
+    scene.add(gridHelper);
+
+    // 坐标轴（微弱）
+    const axisHelper = new THREE.AxesHelper(3.5);
+    scene.add(axisHelper);
+
+    // ---------- 高维几何生成 ----------
+    let lineSegments = null;
+    let pointCloud = null;
+    let edgeLines = null;
+
+    // 实数超立方体顶点 (±1)
+    function generateRealVertices(n) {
+      const count = 1 << n;
+      const verts = new Float32Array(count * n);
+      for (let i = 0; i < count; i++) {
+        for (let j = 0; j < n; j++) {
+          verts[i * n + j] = (i >> j) & 1 ? 1 : -1;
+        }
+      }
+      return { array: verts, count };
+    }
+
+    // 实数边 (汉明距离1)
+    function generateRealEdges(n) {
+      const vertCount = 1 << n;
+      const edges = [];
+      for (let i = 0; i < vertCount; i++) {
+        for (let bit = 0; bit < n; bit++) {
+          const j = i ^ (1 << bit);
+          if (j > i) edges.push([i, j]);
+        }
+      }
+      return edges;
+    }
+
+    // 复数超立方体顶点: 每个复坐标取 {1, -1, i, -i}
+    function generateComplexVertices(m) {
+      // 每个复坐标有4种选择，总顶点数 4^m
+      const count = Math.pow(4, m);
+      const verts = []; // 存储为数组的数组，每个顶点有 m 个复数 (实部,虚部)
+      for (let i = 0; i < count; i++) {
+        const vertex = [];
+        let idx = i;
+        for (let d = 0; d < m; d++) {
+          const choice = idx % 4;
+          idx = Math.floor(idx / 4);
+          let re = 0, im = 0;
+          if (choice === 0) { re = 1; im = 0; }
+          else if (choice === 1) { re = -1; im = 0; }
+          else if (choice === 2) { re = 0; im = 1; }
+          else if (choice === 3) { re = 0; im = -1; }
+          vertex.push({ re, im });
+        }
+        verts.push(vertex);
+      }
+      return verts; // 长度 count
+    }
+
+    // 复数边：汉明距离在"复数字"上为1（即仅一个复坐标改变，且改变是到相邻值？）
+    // 定义：两个复数顶点之间连边，如果它们仅在一个复坐标上不同，且差值模为√2（即从1到i，或1到-i等）
+    function generateComplexEdges(verts) {
+      const edges = [];
+      const n = verts.length;
+      const m = verts[0].length;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          let diffCount = 0;
+          let valid = true;
+          for (let d = 0; d < m; d++) {
+            const a = verts[i][d];
+            const b = verts[j][d];
+            const dre = a.re - b.re;
+            const dim = a.im - b.im;
+            const distSq = dre * dre + dim * dim;
+            if (distSq === 0) continue;
+            if (distSq === 2 && diffCount === 0) { // √2 距离，即1到i等
+              diffCount++;
+            } else {
+              valid = false;
+              break;
+            }
+          }
+          if (valid && diffCount === 1) {
+            edges.push([i, j]);
+          }
+        }
+      }
+      return edges;
+    }
+
+    // 通用旋转矩阵 (实数)
+    function createRotationMatrix(n, angles) {
+      const matrix = Array.from({ length: n }, () => new Array(n).fill(0));
+      for (let i = 0; i < n; i++) matrix[i][i] = 1;
+      let angleIdx = 0;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const ang = angles[angleIdx++] || 0;
+          if (Math.abs(ang) < 1e-9) continue;
+          const c = Math.cos(ang);
+          const s = Math.sin(ang);
+          for (let k = 0; k < n; k++) {
+            const ik = matrix[i][k];
+            const jk = matrix[j][k];
+            matrix[i][k] = c * ik - s * jk;
+            matrix[j][k] = s * ik + c * jk;
+          }
+        }
+      }
+      return matrix;
+    }
+
+    // 将实数顶点投影到3D
+    function projectRealTo3D(vertsArray, n, rotMatrix) {
+      const vertCount = vertsArray.length / n;
+      const projected = new Float32Array(vertCount * 3);
+      for (let v = 0; v < vertCount; v++) {
+        const base = v * n;
+        const rotated = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) {
+          let sum = 0;
+          for (let j = 0; j < n; j++) sum += rotMatrix[i][j] * vertsArray[base + j];
+          rotated[i] = sum;
+        }
+        projected[v * 3] = rotated[0] || 0;
+        projected[v * 3 + 1] = rotated[1] || 0;
+        projected[v * 3 + 2] = rotated[2] || 0;
+      }
+      return projected;
+    }
+
+    // 复数顶点投影到3D并获取相位颜色
+    function projectComplexTo3D(verts, m, time) {
+      const count = verts.length;
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      
+      // 每个复坐标应用 U(1) 相位旋转 e^{i * phase}
+      const phases = [];
+      for (let d = 0; d < m; d++) {
+        phases.push(time * (0.7 + d * 0.4) + d * 1.2);
+      }
+      
+      for (let v = 0; v < count; v++) {
+        let x = 0, y = 0, z = 0;
+        let totalPhase = 0;
+        for (let d = 0; d < m; d++) {
+          const { re, im } = verts[v][d];
+          const ph = phases[d];
+          const cosP = Math.cos(ph);
+          const sinP = Math.sin(ph);
+          const rotRe = re * cosP - im * sinP;
+          const rotIm = re * sinP + im * cosP;
+          // 将每个复坐标的实部和虚部分配到空间轴 (交替使用)
+          if (d === 0) { x += rotRe; y += rotIm; }
+          else if (d === 1) { y += rotRe; z += rotIm; }
+          else if (d === 2) { x += rotRe * 0.6; z += rotIm * 0.6; }
+          // 相位用于颜色 (取第一个非零分量的幅角)
+          if (Math.abs(rotRe) + Math.abs(rotIm) > 0.01) {
+            totalPhase = Math.atan2(rotIm, rotRe);
+          }
+        }
+        positions[v * 3] = x;
+        positions[v * 3 + 1] = y;
+        positions[v * 3 + 2] = z;
+        
+        // 相位映射到HSL色相 (0~2PI -> 0~1)
+        const hue = (totalPhase / (Math.PI * 2) + 0.5) % 1;
+        const col = new THREE.Color().setHSL(hue, 1.0, 0.65);
+        colors[v * 3] = col.r;
+        colors[v * 3 + 1] = col.g;
+        colors[v * 3 + 2] = col.b;
+      }
+      return { positions, colors };
+    }
+
+    // 更新场景中的几何体
+    function updateGeometry(time) {
+      // 清除旧模型
+      if (lineSegments) { scene.remove(lineSegments); lineSegments.geometry.dispose(); }
+      if (pointCloud) { scene.remove(pointCloud); pointCloud.geometry.dispose(); }
+      if (edgeLines) { scene.remove(edgeLines); edgeLines.geometry.dispose(); }
+      lineSegments = null; pointCloud = null; edgeLines = null;
+
+      if (currentMode === 'real') {
+        const n = currentDim;
+        const vertData = generateRealVertices(n);
+        const edgeData = generateRealEdges(n);
+        const planeCount = n * (n - 1) / 2;
+        const angles = new Array(planeCount);
+        for (let i = 0; i < planeCount; i++) angles[i] = time * 0.25 + i * 0.3;
+        const rotMatrix = createRotationMatrix(n, angles);
+        const proj = projectRealTo3D(vertData.array, n, rotMatrix);
+
+        // 线框
+        const edgePositions = [];
+        for (const [a, b] of edgeData) {
+          edgePositions.push(proj[a*3], proj[a*3+1], proj[a*3+2]);
+          edgePositions.push(proj[b*3], proj[b*3+1], proj[b*3+2]);
+        }
+        const edgeGeom = new THREE.BufferGeometry();
+        edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgePositions), 3));
+        const edgeMat = new THREE.LineBasicMaterial({
+          color: 0x5eb8ff,
+          transparent: true,
+          opacity: 0.9,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        edgeLines = new THREE.LineSegments(edgeGeom, edgeMat);
+        scene.add(edgeLines);
+
+        // 顶点光点
+        const pointGeom = new THREE.BufferGeometry();
+        pointGeom.setAttribute('position', new THREE.BufferAttribute(proj, 3));
+        const pointMat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 0.1,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        pointCloud = new THREE.Points(pointGeom, pointMat);
+        scene.add(pointCloud);
+
+        vertsLabel.textContent = vertData.count;
+        edgesLabel.textContent = edgeData.length;
+        phaseLegend.style.display = 'none';
+      } else {
+        // 复数模式
+        const m = complexM;
+        const verts = generateComplexVertices(m);
+        const edgeData = generateComplexEdges(verts);
+        const { positions, colors } = projectComplexTo3D(verts, m, time);
+
+        // 边线框（使用统一的亮白色或淡彩色）
+        const edgePositions = [];
+        for (const [a, b] of edgeData) {
+          edgePositions.push(positions[a*3], positions[a*3+1], positions[a*3+2]);
+          edgePositions.push(positions[b*3], positions[b*3+1], positions[b*3+2]);
+        }
+        if (edgePositions.length > 0) {
+          const edgeGeom = new THREE.BufferGeometry();
+          edgeGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgePositions), 3));
+          const edgeMat = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          });
+          edgeLines = new THREE.LineSegments(edgeGeom, edgeMat);
+          scene.add(edgeLines);
+        }
+
+        // 顶点：用颜色表示相位
+        const pointGeom = new THREE.BufferGeometry();
+        pointGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        pointGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const pointMat = new THREE.PointsMaterial({
+          size: 0.12,
+          vertexColors: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        pointCloud = new THREE.Points(pointGeom, pointMat);
+        scene.add(pointCloud);
+
+        vertsLabel.textContent = verts.length;
+        edgesLabel.textContent = edgeData.length;
+        phaseLegend.style.display = 'flex';
+      }
+    }
+
+    // ---------- UI 交互 ----------
+    function updateUI() {
+      if (currentMode === 'real') {
+        dimBig.textContent = currentDim + 'D';
+        dimSlider.min = 1;
+        dimSlider.max = 9;
+        dimSlider.value = currentDim;
+      } else {
+        dimBig.textContent = 'ℂ' + complexM;
+        dimSlider.min = 1;
+        dimSlider.max = 3;
+        dimSlider.value = complexM;
+      }
+    }
+
+    dimSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (currentMode === 'real') {
+        currentDim = val;
+      } else {
+        complexM = val;
+      }
+      updateUI();
+    });
+
+    modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        if (currentMode === 'real') {
+          currentDim = Math.min(9, Math.max(1, currentDim));
+        } else {
+          complexM = Math.min(3, Math.max(1, complexM));
+        }
+        updateUI();
+      });
+    });
+
+    // 初始化 UI
+    updateUI();
+
+    // ---------- 动画循环 ----------
+    let clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = performance.now() * 0.001;
+      
+      // 更新几何体（连续旋转）
+      updateGeometry(time);
+      
+      // 星空缓慢移动
+      stars.rotation.y += 0.00015;
+      stars.rotation.x += 0.00008;
+      
+      controls.update();
+      composer.render();
+    }
+
+    animate();
+
+    // ---------- 窗口调整 ----------
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    console.log('🌸 维度花园已开启 | 实数1~9维 + 复数ℂ¹~ℂ³ | 绚光投影');
+    console.log('🖱️ 拖拽旋转 | 滚轮缩放 | 滑块切换维度 | 按钮切换实数/复数');
+  </script>
+</body>
+</html>
